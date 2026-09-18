@@ -1,5 +1,6 @@
 # FreePEP 📚 人教社中小学电子教材批量下载器
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## <div align="center"><b><a href="README_EN.md">English</a> | <a href="README.md">简体中文</a></b></div>
 
 **FreePEP** 是一款专为[人民教育出版社中小学电子教材平台](https://jc.pep.com.cn/)开发的自动化教材解析、批量抓取与高清 PDF 合成工具。
 
