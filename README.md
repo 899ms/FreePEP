@@ -20,25 +20,7 @@
 
 
 ---
-# 2026/09/19 FreePEP 1.4
-### 🚀 功能新增与改进 (Features & Improvements)
-    1. **支持下载原图高清版本 (Large Resolution)**：
-       - 核心下载器支持抓取 PEP 官方 `large` 目录高清原图（分辨率提升至 2174×3071），并自带 404 自动回退机制；
-       - WebUI 新增“下载高清原图版本”快捷勾选项，CLI 新增 `--high-res / --hd` 命令行参数与交互选择。
-      2. **文档补充**：
-         - README 新增常见问题排查（FAQ），针对 macOS 环境提示补装 `playwright install chromium`。
-
-      ### 🐛 Bug 修复与代码重构 (Bug Fixes & Refactoring)
-      1. **空值异常修复**：修复 `cli.py` 与 `webui.py` 中因元数据字段 `nj: null` 导致的 `AttributeError: 'NoneType'
-  object has no attribute 'strip'` 隐蔽崩溃。
-    2. **架构重构**：将 `download_all.py` 内部嵌套的 `is_match_xd` 函数提取为模块顶层函数，提升可复用性与可测试性。
-
-    ### 🧪 自动化测试与 CI 护栏 (Testing & CI)
-    1. **分层单元测试**：新建 `tests/test_all.py`（32 个测试用例全部通过），涵盖纯函数映射、排序权重、学段过滤、AES-
-  128-CBC 加解密 Round-trip、下载器离线快路径与 FastAPI WebUI 接口测试。
-    2. **开发依赖分离**：新增 `requirements-dev.txt`（`pytest`、`httpx`），避免污染生产/打包依赖。
-    3. **持续集成配置**：新增 GitHub Actions CI 工作流 (`.github/workflows/ci.yml`)，在 Python 3.9~3.12
-  矩阵下自动运行自动化测试。
+# 2026/09/19 FreePEP v1.4 增加了高清模式和单元测试
 
   
 ## ✨ 核心特性
