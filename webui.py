@@ -58,16 +58,19 @@ class TaskManager:
                 "recent_logs": self.logs[-25:]
             }
 
-    def add_tasks(self, books: List[Dict]):
+    def add_tasks(self, books: List[Dict], high_res: bool = False):
         with self._lock:
             existing_ids = {b["id"] for b in self.queue}
             if self.current_book:
                 existing_ids.add(self.current_book["id"])
             for b in books:
                 if b["id"] not in existing_ids:
-                    self.queue.append(b)
+                    item = dict(b)
+                    item["_high_res"] = high_res
+                    self.queue.append(item)
                     existing_ids.add(b["id"])
-        self.log(f"[*] 已添加 {len(books)} 本教材至下载队列。")
+        quality_str = "高清模式" if high_res else "普通模式"
+        self.log(f"[*] 已添加 {len(books)} 本教材至下载队列 ({quality_str})。")
 
     def run_worker(self):
         """后台单线程顺序执行下载队列中的教材"""
@@ -104,14 +107,16 @@ class TaskManager:
                 self.log(txt)
 
             try:
+                import re
                 xd = normalize_xd(book_to_download.get("xd", "其他学段"))
-                nj = book_to_download.get("nj", "通用").strip() or "通用"
+                nj = (book_to_download.get("nj") or "通用").strip() or "通用"
                 safe_xd = re.sub(r'[\/:*?"<>|]', '_', xd).strip()
                 safe_nj = re.sub(r'[\/:*?"<>|]', '_', nj).strip()
                 sub_dir = os.path.join(safe_xd, safe_nj)
+                is_high_res = book_to_download.get("_high_res", False)
 
                 self.log(f"==================================================")
-                self.log(f"[*] 开始下载教材: [{safe_xd}/{safe_nj}] 《{book_to_download.get('title')}》")
+                self.log(f"[*] 开始下载教材: [{safe_xd}/{safe_nj}] 《{book_to_download.get('title')}》 ({'高清版' if is_high_res else '普通版'})")
                 downloader.download_book(
                     book_id=book_to_download["id"],
                     custom_title=book_to_download.get("title"),
@@ -119,7 +124,8 @@ class TaskManager:
                     progress_cb=progress_callback,
                     log_cb=log_callback,
                     skip_if_exists=True,
-                    clean_temp=True
+                    clean_temp=True,
+                    high_res=is_high_res
                 )
             except Exception as e:
                 self.log(f"[-] 下载异常: {e}")
@@ -143,6 +149,7 @@ class FilterQuery(BaseModel):
 
 class BatchDownloadRequest(BaseModel):
     book_ids: List[str]
+    high_res: Optional[bool] = False
 
 
 @app.get("/api/structure")
@@ -175,7 +182,7 @@ def add_download(req: BatchDownloadRequest):
     all_books = {b["id"]: b for b in PepCatalog.fetch_and_decrypt_all()}
     selected = [all_books[bid] for bid in req.book_ids if bid in all_books]
     if selected:
-        task_manager.add_tasks(selected)
+        task_manager.add_tasks(selected, high_res=bool(req.high_res))
     return {"status": "ok", "added_count": len(selected)}
 
 
@@ -324,7 +331,7 @@ def index_page():
         <div class="space-y-4">
             
             <!-- 批量操作条 -->
-            <div class="flex items-center justify-between bg-white border border-slate-200 px-4 py-3 rounded-lg text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 px-4 py-3 rounded-lg text-xs">
                 <div class="flex items-center space-x-4">
                     <label class="flex items-center space-x-2 cursor-pointer select-none">
                         <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()" class="rounded text-blue-600 focus:ring-blue-500">
@@ -334,10 +341,16 @@ def index_page():
                     <span class="text-slate-500">已选中 <b id="selectedCount" class="text-blue-600">0</b> 本</span>
                 </div>
                 
-                <button onclick="downloadSelected()" id="batchBtn" disabled
-                        class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-md shadow-sm transition flex items-center space-x-1.5">
-                    <span>📥 一键批量下载已选教材</span>
-                </button>
+                <div class="flex items-center space-x-3">
+                    <label class="flex items-center space-x-1.5 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded text-slate-700 font-medium transition" title="开启后将抓取 large 高清切片原图（若该教材无高清原图则自动降级为普通版）">
+                        <input type="checkbox" id="highResToggle" class="rounded text-blue-600 focus:ring-blue-500">
+                        <span>🌟 下载高清原图版本 (large)</span>
+                    </label>
+                    <button onclick="downloadSelected()" id="batchBtn" disabled
+                            class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-md shadow-sm transition flex items-center space-x-1.5">
+                        <span>📥 一键批量下载已选教材</span>
+                    </button>
+                </div>
             </div>
 
             <!-- 教材卡片网格 -->
@@ -560,10 +573,11 @@ def index_page():
         }
 
         async function downloadSingle(id) {
+            const highRes = document.getElementById('highResToggle')?.checked || false;
             await fetch('/api/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ book_ids: [id] })
+                body: JSON.stringify({ book_ids: [id], high_res: highRes })
             });
             pollStatus();
         }
@@ -571,10 +585,11 @@ def index_page():
         async function downloadSelected() {
             const ids = Array.from(selectedBookIds);
             if (ids.length === 0) return;
+            const highRes = document.getElementById('highResToggle')?.checked || false;
             await fetch('/api/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ book_ids: ids })
+                body: JSON.stringify({ book_ids: ids, high_res: highRes })
             });
             selectedBookIds.clear();
             updateSelectionUI();

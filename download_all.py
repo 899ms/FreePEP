@@ -29,6 +29,7 @@ import time
 import random
 import argparse
 import threading
+from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pep_core import PepCatalog, PepDownloader, normalize_xd, get_base_dir
 
@@ -41,12 +42,30 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r'[\/:*?"<>|]', '_', name).strip()
 
 
+def is_match_xd(b_xd: str, b_xdtype: str, target_xds: List[str]) -> bool:
+    """判断教材学段是否与目标学段过滤条件匹配"""
+    if not target_xds:
+        return True
+    for t in target_xds:
+        # 精确匹配或关键词包含匹配（如匹配 六三、五四、高中）
+        if t == b_xd or t == b_xdtype:
+            return True
+        if ("六三" in t and "六三" in b_xdtype) or ("六三" in t and "六三" in b_xd):
+            return True
+        if ("五四" in t or "五·四" in t) and ("五四" in b_xdtype or "五·四" in b_xdtype or "五四" in b_xd or "五·四" in b_xd):
+            return True
+        if ("高中" in t) and ("高中" in b_xd or "高中" in b_xdtype):
+            return True
+    return False
+
+
 def run_download_all(output_dir: str = "./downloads",
                      target_xd: str = None,
                      target_nj: str = None,
                      max_workers: int = 3,
                      delay: float = 1.0,
-                     clean_temp: bool = True):
+                     clean_temp: bool = True,
+                     high_res: bool = False):
     print("=" * 70)
     print("      📚 人民教育出版社 (PEP) 全量教材多线程层级下载器")
     print("=" * 70)
@@ -61,28 +80,13 @@ def run_download_all(output_dir: str = "./downloads",
     if target_xd and target_xd != "全部":
         target_xds = [x.strip() for x in re.split(r'[,，|/]', target_xd) if x.strip()]
 
-    def is_match_xd(b_xd, b_xdtype):
-        if not target_xds:
-            return True
-        for t in target_xds:
-            # 精确匹配或关键词包含匹配（如匹配 六三、五四、高中）
-            if t == b_xd or t == b_xdtype:
-                return True
-            if ("六三" in t and "六三" in b_xdtype) or ("六三" in t and "六三" in b_xd):
-                return True
-            if ("五四" in t or "五·四" in t) and ("五四" in b_xdtype or "五·四" in b_xdtype or "五四" in b_xd or "五·四" in b_xd):
-                return True
-            if ("高中" in t) and ("高中" in b_xd or "高中" in b_xdtype):
-                return True
-        return False
-
     books_to_download = []
     for b in all_books:
         xd = normalize_xd(b.get("xd", "其他学段"))
         xdtype = b.get("xdtype", "").strip()
-        nj = b.get("nj", "通用").strip() or "通用"
+        nj = (b.get("nj") or "通用").strip() or "通用"
         
-        if not is_match_xd(xd, xdtype):
+        if not is_match_xd(xd, xdtype, target_xds):
             continue
         if target_nj and target_nj != "全部" and nj != target_nj:
             continue
@@ -130,7 +134,7 @@ def run_download_all(output_dir: str = "./downloads",
         else:
             stage_dir_name = xd
 
-        nj = b.get("nj", "通用").strip() or "通用"
+        nj = (b.get("nj") or "通用").strip() or "通用"
 
         safe_xd = sanitize_filename(stage_dir_name)
         safe_nj = sanitize_filename(nj)
@@ -161,7 +165,8 @@ def run_download_all(output_dir: str = "./downloads",
                 sub_dir=sub_dir,
                 skip_if_exists=True,
                 clean_temp=clean_temp,
-                quiet=True
+                quiet=True,
+                high_res=high_res
             )
 
             with lock:
@@ -215,6 +220,7 @@ def main():
     parser.add_argument("--xd", help="只下载指定学段（如：小学（六三学制）、初中（六三学制）、高中 等）")
     parser.add_argument("--nj", help="只下载指定年级（如：一年级、七年级 等）")
     parser.add_argument("--delay", "-d", type=float, default=0.5, help="单线程任务间休眠秒数 (默认: 0.5 秒)")
+    parser.add_argument("--high-res", "--hd", action="store_true", help="下载高清大图版本 (large)，默认普通版本 (mobile)")
     parser.add_argument("--keep-temp", action="store_true", help="保留单页切片图片缓存（默认会自动删除以节约空间）")
 
     args = parser.parse_args()
@@ -225,7 +231,8 @@ def main():
         target_nj=args.nj,
         max_workers=args.workers,
         delay=args.delay,
-        clean_temp=not args.keep_temp
+        clean_temp=not args.keep_temp,
+        high_res=args.high_res
     )
 
 

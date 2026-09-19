@@ -144,14 +144,17 @@ def interactive_mode():
         print("[-] 未选择有效教材，退出。")
         return
 
+    res_choice = input("\n请选择画质 [1] 普通清晰度 (默认)  [2] 高清大图 (large): ").strip()
+    is_high_res = (res_choice == "2")
+
     out_dir = os.path.abspath("./downloads")
-    print(f"\n🚀 即将开始下载 {len(to_download)} 本教材，基础保存目录: {out_dir}")
+    print(f"\n🚀 即将开始下载 {len(to_download)} 本教材 ({'高清版本' if is_high_res else '普通版本'})，基础保存目录: {out_dir}")
     print(f"🌲 采用「学段 ➔ 年级」两层子目录分类保存 (已存在 PDF 自动跳过)")
     downloader = PepDownloader(headless=True, output_dir=out_dir)
 
     for idx, b in enumerate(to_download, 1):
         xd = b.get("xd", "其他学段")
-        nj = b.get("nj", "通用").strip() or "通用"
+        nj = (b.get("nj") or "通用").strip() or "通用"
         import re
         safe_xd = re.sub(r'[\/:*?"<>|]', '_', xd).strip()
         safe_nj = re.sub(r'[\/:*?"<>|]', '_', nj).strip()
@@ -165,7 +168,8 @@ def interactive_mode():
             custom_title=b.get("title"),
             sub_dir=sub_dir,
             skip_if_exists=True,
-            clean_temp=True
+            clean_temp=True,
+            high_res=is_high_res
         )
 
     print("\n🎉 全部选定任务执行完毕！")
@@ -198,16 +202,18 @@ def cli_args_mode(args):
     out_dir = os.path.abspath(args.output)
     downloader = PepDownloader(headless=True, output_dir=out_dir)
     use_tree = not args.flat
+    is_high_res = args.high_res
 
     print(f"\n📂 保存根目录: {out_dir}")
     print(f"🌲 目录结构: {'按「学段/年级」两层子目录' if use_tree else '全部平铺在根目录'}")
+    print(f"🖼️ 图像规格: {'高清大图模式 (large)' if is_high_res else '普通模式 (mobile)'}")
 
     for idx, b in enumerate(matched, 1):
         sub_dir = None
         if use_tree:
             import re
             safe_xd = re.sub(r'[\/:*?"<>|]', '_', b.get("xd", "其他学段")).strip()
-            safe_nj = re.sub(r'[\/:*?"<>|]', '_', b.get("nj", "通用") or "通用").strip()
+            safe_nj = re.sub(r'[\/:*?"<>|]', '_', (b.get("nj") or "通用").strip() or "通用").strip()
             sub_dir = os.path.join(safe_xd, safe_nj)
 
         print(f"\n[{idx}/{len(matched)}] 正在下载: 《{b.get('title')}》...")
@@ -216,7 +222,8 @@ def cli_args_mode(args):
             custom_title=b.get("title"),
             sub_dir=sub_dir,
             skip_if_exists=True,
-            clean_temp=True
+            clean_temp=True,
+            high_res=is_high_res
         )
 
     print(f"\n🎉 下载完成！文件已保存至: {out_dir}")
@@ -229,6 +236,7 @@ def main():
     parser.add_argument("--xk", help="指定学科（如：语文、数学、英语、物理等）")
     parser.add_argument("--nj", help="指定年级（如：一年级、七年级、必修等）")
     parser.add_argument("--search", "-s", help="全局搜索关键词")
+    parser.add_argument("--high-res", "--hd", action="store_true", help="下载高清大图版本 (large)，默认普通版本 (mobile)")
     parser.add_argument("--output", "-o", default="./downloads", help="PDF 文件保存目录 (默认: ./downloads)")
     parser.add_argument("--flat", action="store_true", help="平铺存放在根目录下（默认自动按「学段/年级」两层子目录分类）")
     parser.add_argument("--yes", "-y", action="store_true", help="免确认直接开始下载")

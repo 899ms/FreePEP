@@ -20,7 +20,27 @@
 
 
 ---
+# 2026/09/19 FreePEP 1.4
+### 🚀 功能新增与改进 (Features & Improvements)
+    1. **支持下载原图高清版本 (Large Resolution)**：
+       - 核心下载器支持抓取 PEP 官方 `large` 目录高清原图（分辨率提升至 2174×3071），并自带 404 自动回退机制；
+       - WebUI 新增“下载高清原图版本”快捷勾选项，CLI 新增 `--high-res / --hd` 命令行参数与交互选择。
+      2. **文档补充**：
+         - README 新增常见问题排查（FAQ），针对 macOS 环境提示补装 `playwright install chromium`。
 
+      ### 🐛 Bug 修复与代码重构 (Bug Fixes & Refactoring)
+      1. **空值异常修复**：修复 `cli.py` 与 `webui.py` 中因元数据字段 `nj: null` 导致的 `AttributeError: 'NoneType'
+  object has no attribute 'strip'` 隐蔽崩溃。
+    2. **架构重构**：将 `download_all.py` 内部嵌套的 `is_match_xd` 函数提取为模块顶层函数，提升可复用性与可测试性。
+
+    ### 🧪 自动化测试与 CI 护栏 (Testing & CI)
+    1. **分层单元测试**：新建 `tests/test_all.py`（32 个测试用例全部通过），涵盖纯函数映射、排序权重、学段过滤、AES-
+  128-CBC 加解密 Round-trip、下载器离线快路径与 FastAPI WebUI 接口测试。
+    2. **开发依赖分离**：新增 `requirements-dev.txt`（`pytest`、`httpx`），避免污染生产/打包依赖。
+    3. **持续集成配置**：新增 GitHub Actions CI 工作流 (`.github/workflows/ci.yml`)，在 Python 3.9~3.12
+  矩阵下自动运行自动化测试。
+
+  
 ## ✨ 核心特性
 
 - 🎯 **双操作模式**：
@@ -104,6 +124,7 @@ python cli.py --xd "小学（六三学制）" --xk "语文" --nj "一年级" -o 
 | `--xk` | 指定学科 | `语文`、`数学`、`英语`、`物理`、`化学`、`历史`、`道德与法治` 等 |
 | `--nj` | 指定年级/册次 | `一年级`、`二年级` ... `九年级`、`专项`、`必修` 等 |
 | `--search`, `-s` | 关键词全局搜索 | `必修`、`高一`、`地理` |
+| `--high-res`, `--hd` | 下载高清原图版本 (`large`)，默认普通版本 (`mobile`) | 无需参数 |
 | `--clear-cache`, `-c` | 清理本地下载临时图片缓存 (`temp_pages`) | 无需参数 |
 | `--refresh`, `-r` | 强制重新从官方服务器拉取解密最新目录 | 无需参数 |
 | `--output`, `-o` | 指定 PDF 保存目录 | 默认: `./downloads` |
@@ -177,9 +198,19 @@ FreePEP/
 
 ---
 
-## 🔍 技术原理解析
+## ❓ 疑难解答 (FAQ)
 
-1. 略。我是不明白为什么免费教材免费提供阅读不提供免费下载。
+### Q: macOS 用户使用 WebUI 可以在线阅读，但点击下载后显示“任务完成”，而 `downloads` 目录没有任何 PDF 文件？
+**原因分析**：
+* **“在线看”正常**：点击“在线阅读”是由您的本机浏览器直接打开人教社公开阅读页面，不依赖后台 Python 浏览器驱动。
+* **下载没有文件**：后台批量下载切片和过盾需要通过 Playwright 驱动无头 Chromium 浏览器。在 macOS 系统源码运行环境下，如果仅执行了 `pip install -r requirements.txt`，而**漏装了 Playwright 浏览器内核**，后台就会抛出 `Executable doesn't exist` 错误导致下载中断；而任务退出后界面可能误提示完成。
+
+**解决方案**：
+在 macOS 终端中激活当前 Python 环境，执行以下命令手动补全安装 Playwright 的 Chromium 内核：
+```bash
+playwright install chromium
+```
+> **排查提示**：如仍有问题，请查看运行 `python webui.py` 的终端控制台窗口，观察是否有详细的异常报错输出（如网络超时或环境异常）。
 
 ---
 

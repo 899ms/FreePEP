@@ -391,7 +391,8 @@ class PepDownloader:
                       log_cb: Optional[Callable[[str], None]] = None,
                       skip_if_exists: bool = True,
                       clean_temp: bool = True,
-                      quiet: bool = False) -> Optional[str]:
+                      quiet: bool = False,
+                      high_res: bool = False) -> Optional[str]:
         """
         下载单本教材
         :param book_id: 教材 ID（如 1284001101241）
@@ -402,6 +403,7 @@ class PepDownloader:
         :param skip_if_exists: 若本地已存在完整 PDF 则自动跳过
         :param clean_temp: 合成 PDF 后自动删除该书的切片图片以节约磁盘空间
         :param quiet: 静默模式，不打印各页下载过程，仅在关键节点或报错时提示
+        :param high_res: 是否下载高清版本图片 (large)，默认普通版本 (mobile)
         :return: 生成的 PDF 绝对路径
         """
         target_dir = os.path.join(self.output_dir, sub_dir) if sub_dir else self.output_dir
@@ -498,17 +500,20 @@ class PepDownloader:
                 browser.close()
                 return None
 
+            res_type = "large" if high_res else "mobile"
             if not quiet:
-                info_msg = f"[+] 教材: 《{safe_title}》 | 总页数: {total_pages} 页"
+                mode_str = "高清模式 (large)" if high_res else "普通模式 (mobile)"
+                info_msg = f"[+] 教材: 《{safe_title}》 | 规格: {mode_str} | 总页数: {total_pages} 页"
                 if log_cb: log_cb(info_msg)
                 else: print(info_msg)
 
-            temp_dir = os.path.join(get_base_dir(), "temp_pages", book_id)
+            temp_dir = os.path.join(get_base_dir(), "temp_pages", f"{book_id}_{res_type}")
             os.makedirs(temp_dir, exist_ok=True)
             image_files = []
 
             for page_num in range(1, total_pages + 1):
-                img_url = f"https://book.pep.com.cn/{book_id}/files/mobile/{page_num}.jpg"
+                img_url = f"https://book.pep.com.cn/{book_id}/files/{res_type}/{page_num}.jpg"
+                fallback_url = f"https://book.pep.com.cn/{book_id}/files/mobile/{page_num}.jpg" if high_res else None
                 img_path = os.path.join(temp_dir, f"{page_num}.jpg")
 
                 # 本地已有合法 JPEG 则跳过
@@ -521,6 +526,8 @@ class PepDownloader:
 
                 download_success = False
                 for retry in range(4):
+                    # 尝试下载图片（如果为高清模式且返回404等错误，自动回退到普通 mobile 版本）
+                    current_fetch_url = img_url
                     res = page.evaluate("""async (url) => {
                         try {
                             const resp = await fetch(url);
@@ -538,7 +545,28 @@ class PepDownloader:
                         } catch (e) {
                             return { status: 500, error: e.toString() };
                         }
-                    }""", img_url)
+                    }""", current_fetch_url)
+
+                    # 如果高清版资源不存在(404)，尝试回退到普通版
+                    if fallback_url and res.get("status") == 404:
+                        res = page.evaluate("""async (url) => {
+                            try {
+                                const resp = await fetch(url);
+                                const ctype = resp.headers.get('content-type') || '';
+                                const blob = await resp.blob();
+                                return new Promise((resolve) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve({ 
+                                        status: resp.status, 
+                                        ctype: ctype, 
+                                        data: reader.result 
+                                    });
+                                    reader.readAsDataURL(blob);
+                                });
+                            } catch (e) {
+                                return { status: 500, error: e.toString() };
+                            }
+                        }""", fallback_url)
 
                     data_uri = res.get("data", "")
                     if res.get("status") == 200 and data_uri and ("image" in res.get("ctype", "") or data_uri.startswith("data:image")):
